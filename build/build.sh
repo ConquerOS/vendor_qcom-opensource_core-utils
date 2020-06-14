@@ -161,6 +161,16 @@ DATE=${DATE:-date}
 EPOCH_TIME=`${DATE} +%s`
 export BUILD_DATETIME="$EPOCH_TIME"
 
+NON_AB_TARGET_LIST=("bengal_32go")
+for NON_AB_TARGET in "${NON_AB_TARGET_LIST[@]}"
+do
+    if [ "$TARGET_PRODUCT" == "$NON_AB_TARGET" ]; then
+        log "${TARGET_PRODUCT} found in Non-A/B Target List"
+        ENABLE_AB=false
+        break
+    fi
+done
+
 # Default A/B configuration flag for all QSSI targets (not used for legacy targets).
 ENABLE_AB=${ENABLE_AB:-true}
 ARGS="$@"
@@ -177,9 +187,10 @@ DIST_ENABLED=false
 QSSI_ARGS_WITHOUT_DIST=""
 DIST_DIR="out/dist"
 MERGED_TARGET_FILES="$DIST_DIR/merged-qssi_${TARGET_PRODUCT}-target_files.zip"
+LEGACY_TARGET_FILES="$DIST_DIR/${TARGET_PRODUCT}-target_files-*.zip"
 MERGED_OTA_ZIP="$DIST_DIR/merged-qssi_${TARGET_PRODUCT}-ota.zip"
-DIST_ENABLED_TARGET_LIST=("lahaina" "kona" "sdm710" "sdm845" "msmnile" "sm6150" "trinket" "trinket_32" "lito" "bengal" "bengal_32" "atoll" "bengal_32go")
-DYNAMIC_PARTITION_ENABLED_TARGET_LIST=("lahaina" "kona" "msmnile" "sdm710" "lito" "trinket" "trinket_32" "atoll" "bengal" "bengal_32")
+DIST_ENABLED_TARGET_LIST=("lahaina" "kona" "sdm710" "sdm845" "msmnile" "sm6150" "trinket" "trinket_32" "lito" "bengal" "bengal_32" "atoll" "sdm660_64" "bengal_32go")
+DYNAMIC_PARTITION_ENABLED_TARGET_LIST=("lahaina" "kona" "msmnile" "sdm710" "lito" "trinket" "trinket_32" "atoll" "sdm660_64" "bengal" "bengal_32" "bengal_32go")
 DYNAMIC_PARTITIONS_IMAGES_PATH=$OUT
 DP_IMAGES_OVERRIDE=false
 function log() {
@@ -203,7 +214,7 @@ QSSI_ARGS="$QSSI_ARGS BOARD_DYNAMIC_PARTITION_ENABLE=$BOARD_DYNAMIC_PARTITION_EN
 # Set Shipping API level on target basis.
 SHIPPING_API_P="28"
 SHIPPING_API_Q="29"
-SHIPPING_API_P_TARGET_LIST=("sdm845" "sm6150" "bengal_32go")
+SHIPPING_API_P_TARGET_LIST=("sdm845" "sm6150")
 SHIPPING_API_LEVEL=$SHIPPING_API_Q
 for P_API_TARGET in "${SHIPPING_API_P_TARGET_LIST[@]}"
 do
@@ -369,6 +380,18 @@ function full_build () {
     merge_only
 }
 
+function nonqssi_legacy_build () {
+    command "source build/envsetup.sh"
+    command "make $ARGS"
+    if [ "$DIST_ENABLED" = true ] && [ "$BOARD_DYNAMIC_PARTITION_ENABLE" = true ]; then
+        check_if_file_exists "$DIST_DIR/super.img"
+        log "${TARGET_PRODUCT} copy $DIST_DIR/super.img to $OUT/ "
+        command "cp $DIST_DIR/super.img $OUT/"
+        command "unzip -jo $LEGACY_TARGET_FILES IMAGES/*.img -d $DYNAMIC_PARTITIONS_IMAGES_PATH"
+    fi
+}
+
+
 if [ "$TARGET_PRODUCT" == "qssi" ]; then
     log "FAILED: lunch option should not be set to qssi. Please set a target out of the following QSSI targets: ${QSSI_TARGETS_LIST[@]}"
     exit 1
@@ -386,8 +409,7 @@ done
 # For non-QSSI targets
 if [ $QSSI_TARGET_FLAG -eq 0 ]; then
     log "${TARGET_PRODUCT} is not a QSSI target. Using legacy build process for compilation..."
-    command "source build/envsetup.sh"
-    command "make $ARGS"
+    nonqssi_legacy_build
 else # For QSSI targets
     log "Building Android using build.sh for ${TARGET_PRODUCT}..."
     log "QSSI_ARGS=\"$QSSI_ARGS\""
